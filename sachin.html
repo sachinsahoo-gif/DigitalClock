@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Digital Clock</title>
+  <style>
+    :root {
+      --bg: #0f172a;       /* slate-900 */
+      --card: #111827cc;   /* semi-transparent */
+      --text: #e5e7eb;     /* gray-200 */
+      --muted: #94a3b8;    /* slate-400 */
+      --accent: #22c55e;   /* green-500 */
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+      background: radial-gradient(1200px 800px at 70% 20%, #1f2937, var(--bg));
+      color: var(--text);
+    }
+    .wrap {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .clock-card {
+      width: min(92vw, 560px);
+      padding: 28px 24px;
+      background: var(--card);
+      border: 1px solid #1f2937;
+      border-radius: 24px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .time {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 1px;
+      font-weight: 700;
+      line-height: 1;
+      font-size: clamp(2.6rem, 6vw, 4.2rem);
+    }
+    .ampm {
+      margin-left: 10px;
+      font-size: clamp(0.9rem, 2.2vw, 1.1rem);
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: .08em;
+    }
+    .date {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: clamp(1rem, 2.6vw, 1.25rem);
+      letter-spacing: .02em;
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    button, .pill {
+      border: none;
+      cursor: pointer;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: #0b1220;
+      color: var(--text);
+      font-weight: 600;
+      letter-spacing: .02em;
+      box-shadow: inset 0 0 0 1px #1f2937, 0 8px 20px rgba(0,0,0,.25);
+      transition: transform .08s ease, box-shadow .2s ease, background .2s ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+    .accent { box-shadow: inset 0 0 0 1px #14532d, 0 8px 20px rgba(34,197,94,.25); background: #0c1a12; }
+    .blink {
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: .35; }
+    }
+    footer {
+      margin-top: 18px;
+      font-size: .9rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="clock-card">
+      <div class="row">
+        <div>
+          <span id="time" class="time">00:00:00</span>
+          <span id="ampm" class="ampm" aria-hidden="true"></span>
+        </div>
+        <div class="controls">
+          <button id="toggle" class="accent" title="Toggle 12/24-hour">12-hour</button>
+        </div>
+      </div>
+  <div id="date" class="date"></div>
+      <footer>
+        <span id="tz"></span>
+        <span class="pill blink" aria-hidden="true">Live</span>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      // Get elements from the page
+      const timeElement = document.getElementById('time');
+      const ampmElement = document.getElementById('ampm');
+      const dateElement = document.getElementById('date');
+      const timezoneElement = document.getElementById('tz');
+      const toggleButton = document.getElementById('toggle');
+
+      // Read saved setting for 24-hour mode (default is false)
+      let is24Hour = JSON.parse(localStorage.getItem('clock_is24') || 'false');
+
+      // Add a leading zero if needed
+      function pad(num) {
+        return num.toString().padStart(2, '0');
+      }
+
+      // Update the clock display
+      function updateClock() {
+        const now = new Date();
+        let hours = now.getHours();
+        let minutes = now.getMinutes();
+        let seconds = now.getSeconds();
+
+        // Show AM/PM for 12-hour mode
+        if (!is24Hour) {
+          ampmElement.textContent = hours >= 12 ? 'PM' : 'AM';
+          hours = hours % 12 || 12; // Convert 0 to 12
+          ampmElement.style.display = '';
+        } else {
+          ampmElement.textContent = '';
+          ampmElement.style.display = 'none';
+        }
+
+        // Show time in HH:MM:SS format
+        timeElement.textContent = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+
+        // Show full date (e.g., Sunday, 17 August 2025)
+        dateElement.textContent = now.toLocaleDateString(undefined, {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+
+        // Show time zone
+        timezoneElement.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone.replace('_', ' ');
+
+        // Schedule next update at the next second
+        scheduleNextUpdate();
+      }
+
+      // Schedule the next update so the clock stays accurate
+      let rafId, timeoutId;
+      function scheduleNextUpdate() {
+        cancelAnimationFrame(rafId);
+        clearTimeout(timeoutId);
+        const msToNextSecond = 1000 - (Date.now() % 1000);
+        timeoutId = setTimeout(() => {
+          rafId = requestAnimationFrame(updateClock);
+        }, msToNextSecond);
+      }
+
+      // Toggle between 12-hour and 24-hour mode
+      toggleButton.onclick = function() {
+        is24Hour = !is24Hour;
+        localStorage.setItem('clock_is24', JSON.stringify(is24Hour));
+        toggleButton.textContent = is24Hour ? '24-hour' : '12-hour';
+        updateClock();
+      };
+
+      // Set initial button text and start the clock
+      toggleButton.textContent = is24Hour ? '24-hour' : '12-hour';
+      updateClock();
+    })();
+  </script>
+</body>
+</html>
